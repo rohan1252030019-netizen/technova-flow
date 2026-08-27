@@ -5,6 +5,7 @@ import { PrismaClient } from "@/app/generated/prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
+  pool?: Pool;
 };
 
 function createClient() {
@@ -18,21 +19,21 @@ function createClient() {
     connectionString.includes("sslmode=") ||
     process.env.NODE_ENV === "production";
 
-  const pool = new Pool({
-    connectionString,
-    ssl: isCloud ? { rejectUnauthorized: false } : undefined,
-    max: 10,
-  });
+  if (!globalForPrisma.pool) {
+    globalForPrisma.pool = new Pool({
+      connectionString,
+      ssl: isCloud ? { rejectUnauthorized: false } : undefined,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
+  }
 
-  const adapter = new PrismaPg(pool);
+  const adapter = new PrismaPg(globalForPrisma.pool);
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+export const prisma = globalForPrisma.prisma ?? (globalForPrisma.prisma = createClient());
 
 export type PrismaTx = Omit<
   PrismaClient,

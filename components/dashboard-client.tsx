@@ -31,7 +31,7 @@ import {
   TrendingUp,
   Activity,
 } from "lucide-react";
-import { cn, formatRelative, formatDateTime, timeUntil } from "@/lib/utils";
+import { cn, formatDateTime, timeUntil } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "#94a3b8",
@@ -66,19 +66,41 @@ type DashboardData = {
   byStatus: { status: string; count: number }[];
 };
 
+const DEFAULT_DATA: DashboardData = {
+  stats: {
+    totalEmployees: 0,
+    activeWorkflows: 0,
+    totalRequests: 0,
+    pendingApprovals: 0,
+    completedRequests: 0,
+    rejectedRequests: 0,
+    overdueTasks: 0,
+    avgProcessingHours: 0,
+    slaBreaches: 0,
+    completionRate: 0,
+  },
+  requestTrend: [],
+  byDepartment: [],
+  byStatus: [],
+};
+
 export function DashboardClient() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] = useState<DashboardData>(DEFAULT_DATA);
   const [pending, setPending] = useState<{ requests: any[]; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       fetch("/api/analytics/summary").then((r) => r.json()),
       fetch("/api/approvals?status=pending&pageSize=5").then((r) => r.json()),
     ])
-      .then(([analytics, approvals]) => {
-        setData(analytics.data);
-        setPending(approvals.data);
+      .then(([analyticsResult, approvalsResult]) => {
+        if (analyticsResult.status === "fulfilled" && analyticsResult.value?.data) {
+          setData(analyticsResult.value.data);
+        }
+        if (approvalsResult.status === "fulfilled" && approvalsResult.value?.data) {
+          setPending(approvalsResult.value.data);
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -100,20 +122,8 @@ export function DashboardClient() {
     );
   }
 
-  if (!data) {
-    return (
-      <Card>
-        <EmptyState
-          icon={<Inbox className="h-10 w-10" />}
-          title="Could not load dashboard"
-          description="Please refresh the page or try again later."
-        />
-      </Card>
-    );
-  }
-
   const s = data.stats;
-  const statusChartData = data.byStatus.map((x) => ({
+  const statusChartData = (data.byStatus || []).map((x) => ({
     name: x.status.replace(/_/g, " "),
     value: x.count,
     color: STATUS_COLORS[x.status] || "#94a3b8",
@@ -156,25 +166,33 @@ export function DashboardClient() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Requests Over Time" subtitle="Last 30 days" className="lg:col-span-2">
           <div className="h-72 px-2 py-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChartLike data={data.requestTrend} />
-            </ResponsiveContainer>
+            {data.requestTrend?.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChartLike data={data.requestTrend} />
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState title="No request history" description="Submit requests to view trend graphs." />
+            )}
           </div>
         </Card>
 
         <Card title="Requests by Status">
           <div className="h-72 px-2 py-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={statusChartData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={2}>
-                  {statusChartData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-              </PieChart>
-            </ResponsiveContainer>
+            {statusChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={statusChartData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={2}>
+                    {statusChartData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState title="No status data" description="Status distribution will appear here." />
+            )}
           </div>
         </Card>
       </div>
@@ -182,19 +200,23 @@ export function DashboardClient() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Requests by Department">
           <div className="h-72 px-2 py-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.byDepartment}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {data.byDepartment.map((_, i) => (
-                    <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {data.byDepartment?.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.byDepartment}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {data.byDepartment.map((_, i) => (
+                      <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState title="No department data" description="Department breakdowns will appear here." />
+            )}
           </div>
         </Card>
 
