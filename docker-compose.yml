@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cnt_project_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cnt_admin
+      POSTGRES_PASSWORD: cnt_admin_dev_password
+      POSTGRES_DB: cnt_project
+    ports:
+      - "5432:5432"
+    volumes:
+      - cnt_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cnt_admin -d cnt_project"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  cnt_pgdata:

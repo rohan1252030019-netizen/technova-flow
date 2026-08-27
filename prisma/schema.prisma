@@ -1,0 +1,586 @@
+// Enterprise Workflow Management System — TechNova Global
+// PostgreSQL schema via Prisma ORM
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ────────────────────────────────────────────────
+// ENUMS
+// ────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  HR_ADMIN
+  MANAGER
+  DEPARTMENT_HEAD
+  FINANCE
+  EMPLOYEE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  PENDING_APPROVAL
+  IN_PROGRESS
+  ESCALATED
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum RequestPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RequestType {
+  LEAVE
+  EXPENSE
+  REIMBURSEMENT
+  PURCHASE
+  IT_SERVICE
+  DOCUMENT_APPROVAL
+  CUSTOM
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum StepType {
+  APPROVAL
+  PROCESSING
+  TASK
+}
+
+enum AssigneeType {
+  ROLE
+  DEPARTMENT
+  USER
+}
+
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+  SEND_BACK
+  REQUEST_CHANGES
+  DELEGATED
+  ESCALATED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  NEW_REQUEST
+  APPROVAL_REQUIRED
+  REQUEST_APPROVED
+  REQUEST_REJECTED
+  REQUEST_RETURNED
+  TASK_ASSIGNED
+  TASK_DEADLINE
+  TASK_OVERDUE
+  SLA_BREACHED
+  ESCALATION
+  WORKFLOW_COMPLETED
+  REQUEST_CANCELLED
+  COMMENT_ADDED
+  SYSTEM
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+// ────────────────────────────────────────────────
+// RBAC
+// ────────────────────────────────────────────────
+
+model Permission {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  module    String
+  createdAt DateTime @default(now())
+
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+}
+
+// ────────────────────────────────────────────────
+// ORGANIZATION
+// ────────────────────────────────────────────────
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  logoUrl     String?
+  timezone    String   @default("Asia/Kolkata")
+  currency    String   @default("INR")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+  headId      String?
+  head        User?    @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users          User[]
+  workflows      Workflow[]
+  requests       Request[]
+  tasks          Task[]
+  projects       Project[]
+  stepAssignments WorkflowStep[] @relation("StepDepartment")
+
+  @@index([headId])
+}
+
+// ────────────────────────────────────────────────
+// USERS & AUTH
+// ────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  employeeId   String     @unique
+  name         String
+  email        String     @unique
+  phone        String?
+  passwordHash String
+  role         Role       @default(EMPLOYEE)
+  designation  String?
+  joiningDate  DateTime?
+  status       UserStatus @default(ACTIVE)
+  avatarColor  String?
+  managerId    String?
+  manager      User?      @relation("ManagerOf", fields: [managerId], references: [id], onDelete: SetNull)
+  reports      User[]     @relation("ManagerOf")
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  sessions             Session[]
+  passwordResetTokens  PasswordResetToken[]
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  createdRequests      Request[]          @relation("Requester")
+  createdRequestOf     Request[]          @relation("RequestCreator")
+  assignedRequests     Request[]          @relation("RequestAssignee")
+  approvals            Approval[]
+  assignedTasks        Task[]             @relation("TaskAssignee")
+  createdTasks         Task[]             @relation("TaskCreator")
+  comments             Comment[]
+  attachments          Attachment[]
+  escalationsReceived  Escalation[]
+  escalationsInitiated Escalation[]       @relation("EscalationInitiator")
+  projectsLed          Project[]
+  departmentHeadOf     Department[]       @relation("DepartmentHead")
+  workflowApprovals    WorkflowStep[]     @relation("StepAssignee")
+  workflowEscalations  WorkflowStep[]     @relation("StepEscalationAssignee")
+  createdWorkflows     Workflow[]         @relation("WorkflowCreator")
+
+  @@index([departmentId])
+  @@index([managerId])
+  @@index([role])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String   @unique
+  expiresAt    DateTime
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String?
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+}
+
+// ────────────────────────────────────────────────
+// WORKFLOW ENGINE
+// ────────────────────────────────────────────────
+
+model Workflow {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  trigger     RequestType    @default(CUSTOM)
+  status      WorkflowStatus @default(DRAFT)
+  version     Int            @default(1)
+  departmentId String?
+  department  Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdById String
+  createdBy   User           @relation("WorkflowCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  steps    WorkflowStep[]
+  requests Request[]
+  tasks    Task[]
+
+  @@index([trigger, status])
+  @@index([departmentId])
+}
+
+model WorkflowStep {
+  id                    String       @id @default(cuid())
+  workflowId            String
+  workflow              Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  name                  String
+  description           String?
+  order                 Int
+  stepType              StepType     @default(APPROVAL)
+  assigneeType          AssigneeType @default(ROLE)
+  assignedRole          Role?
+  assignedDepartmentId  String?
+  assignedDepartment    Department?  @relation("StepDepartment", fields: [assignedDepartmentId], references: [id], onDelete: SetNull)
+  assignedUserId        String?
+  assignedUser          User?        @relation("StepAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  requiresApproval      Boolean      @default(true)
+  allowRejection        Boolean      @default(true)
+  requiresComment       Boolean      @default(false)
+  slaHours              Int?
+  escalationHours       Int?
+  escalationAssigneeType AssigneeType?
+  escalationRole        Role?
+  escalationUserId      String?
+  escalationUser        User?        @relation("StepEscalationAssignee", fields: [escalationUserId], references: [id], onDelete: SetNull)
+  isFinal               Boolean      @default(false)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  conditions WorkflowCondition[]
+  requests   Request[]
+  approvals  Approval[]
+  tasks      Task[]
+
+  @@unique([workflowId, order])
+  @@index([workflowId])
+}
+
+model WorkflowCondition {
+  id          String       @id @default(cuid())
+  stepId      String
+  step        WorkflowStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  field       String
+  operator    String
+  value       String
+  createdAt   DateTime     @default(now())
+
+  @@index([stepId])
+}
+
+// ────────────────────────────────────────────────
+// REQUESTS
+// ────────────────────────────────────────────────
+
+model Request {
+  id             String        @id @default(cuid())
+  requestNumber  String        @unique
+  type           RequestType   @default(CUSTOM)
+  title          String
+  description    String?
+  requesterId    String
+  requester      User          @relation("Requester", fields: [requesterId], references: [id], onDelete: Restrict)
+  departmentId   String?
+  department     Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  workflowId     String?
+  workflow       Workflow?     @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  status         RequestStatus @default(DRAFT)
+  priority       RequestPriority @default(MEDIUM)
+  currentStepId  String?
+  currentStep    WorkflowStep? @relation(fields: [currentStepId], references: [id], onDelete: SetNull)
+  currentStepOrder Int?        @default(0)
+  assignedUserId String?
+  assignedUser   User?         @relation("RequestAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  amount         Decimal?      @db.Decimal(12, 2)
+  currency       String        @default("INR")
+  metadata       Json?
+  startedAt      DateTime?
+  dueDate        DateTime?
+  completedAt    DateTime?
+  createdById    String
+  createdBy      User          @relation("RequestCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  approvals   Approval[]
+  comments    Comment[]
+  attachments Attachment[]
+  tasks       Task[]
+  escalations Escalation[]
+  slaSnapshots SlaSnapshot[]
+
+  @@index([requesterId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([type, createdAt])
+  @@index([dueDate])
+}
+
+model Approval {
+  id        String         @id @default(cuid())
+  requestId String
+  request   Request        @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  stepId    String
+  step      WorkflowStep   @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  approverId String
+  approver  User           @relation(fields: [approverId], references: [id], onDelete: Restrict)
+  action    ApprovalAction
+  comment   String?
+  createdAt DateTime       @default(now())
+
+  @@unique([requestId, stepId])
+  @@index([approverId])
+  @@index([requestId, createdAt])
+}
+
+// ────────────────────────────────────────────────
+// SLA & ESCALATION
+// ────────────────────────────────────────────────
+
+model SlaSnapshot {
+  id          String   @id @default(cuid())
+  requestId   String
+  request     Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  stepId      String?
+  stepName    String
+  slaHours    Int
+  startedAt   DateTime
+  dueAt       DateTime
+  breached    Boolean  @default(false)
+  breachedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([requestId])
+  @@index([breached])
+}
+
+model Escalation {
+  id          String   @id @default(cuid())
+  requestId   String
+  request     Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  stepId      String?
+  initiatedById String?
+  initiatedBy User?    @relation("EscalationInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
+  escalatedToId String
+  escalatedTo User     @relation(fields: [escalatedToId], references: [id], onDelete: Restrict)
+  reason      String?
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+
+  @@index([requestId])
+  @@index([escalatedToId])
+}
+
+// ────────────────────────────────────────────────
+// TASKS
+// ────────────────────────────────────────────────
+
+model Task {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  assigneeId  String
+  assignee    User         @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  departmentId String?
+  department  Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(TODO)
+  dueDate     DateTime?
+  completedAt DateTime?
+  workflowId  String?
+  workflow    Workflow?    @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  stepId      String?
+  step        WorkflowStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+  requestId   String?
+  request     Request?     @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  createdById String
+  createdBy   User         @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  comments    Comment[]
+  attachments Attachment[]
+
+  @@index([assigneeId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// ────────────────────────────────────────────────
+// COMMENTS & ATTACHMENTS
+// ────────────────────────────────────────────────
+
+model Comment {
+  id        String   @id @default(cuid())
+  body      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestId String?
+  request   Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+  @@index([taskId])
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  requestId  String?
+  request    Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  taskId     String?
+  task       Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploaderId String
+  uploader   User     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  originalName String
+  storedName String
+  mimeType   String
+  size       Int
+  path       String
+  createdAt  DateTime @default(now())
+
+  @@index([requestId])
+  @@index([uploaderId])
+}
+
+// ────────────────────────────────────────────────
+// NOTIFICATIONS & AUDIT
+// ────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String?
+  link      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userEmail   String?
+  userName    String?
+  action      String
+  entityType  String?
+  entityId    String?
+  details     Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// ────────────────────────────────────────────────
+// PROJECTS
+// ────────────────────────────────────────────────
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  code        String        @unique
+  description String?
+  departmentId String?
+  department  Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  leadId      String?
+  lead        User?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  status      ProjectStatus @default(PLANNING)
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([departmentId])
+  @@index([status])
+}

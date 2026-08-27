@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: technova_flow_app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://cnt_user:cnt_password_secure@db:5432/cnt_project?schema=public
+      - AUTH_SECRET=${AUTH_SECRET:-production-secure-random-secret-key-32-chars}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - CRON_SECRET=${CRON_SECRET:-production-cron-secret-key}
+      - MAX_UPLOAD_SIZE_MB=10
+      - UPLOAD_DIR=/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+
+  db:
+    image: postgres:16-alpine
+    container_name: technova_flow_db
+    restart: always
+    environment:
+      POSTGRES_USER: cnt_user
+      POSTGRES_PASSWORD: cnt_password_secure
+      POSTGRES_DB: cnt_project
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cnt_user -d cnt_project"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  uploads_data:
