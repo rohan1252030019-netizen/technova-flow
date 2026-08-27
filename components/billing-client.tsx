@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SessionUser } from "@/lib/auth";
-import { Card, Badge, Button, Skeleton } from "@/components/ui";
+import { Card, Badge, Button, Skeleton, Modal, Input } from "@/components/ui";
 import {
   Check,
   Zap,
@@ -16,6 +16,8 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
+  Mail,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +58,19 @@ export function BillingClient({ user }: { user: SessionUser }) {
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Contact Sales Modal State
+  const [contactOpen, setContactOpen] = useState(false);
+  const [company, setCompany] = useState(user.name ? `${user.name}'s Organization` : "TechNova Global");
+  const [workEmail, setWorkEmail] = useState(user.email);
+  const [teamSize, setTeamSize] = useState("100 - 500 members");
+  const [inquiryNotes, setInquiryNotes] = useState("");
+  const [selectedReqs, setSelectedReqs] = useState<string[]>([
+    "On-Premise Docker Deployment",
+    "Custom SAML / SSO Integration",
+  ]);
+  const [submittingInquiry, setSubmittingInquiry] = useState(false);
+  const [inquirySuccess, setInquirySuccess] = useState(false);
 
   const fetchSubscription = async () => {
     try {
@@ -125,6 +140,40 @@ export function BillingClient({ user }: { user: SessionUser }) {
       setMessage({ type: "error", text: "Failed to open customer portal" });
     } finally {
       setPortalLoading(false);
+    }
+  };
+
+  const toggleReq = (req: string) => {
+    setSelectedReqs((prev) =>
+      prev.includes(req) ? prev.filter((r) => r !== req) : [...prev, req]
+    );
+  };
+
+  const handleSendInquiry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingInquiry(true);
+    try {
+      const res = await fetch("/api/billing/contact-sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company,
+          email: workEmail,
+          teamSize,
+          requirements: selectedReqs,
+          message: inquiryNotes,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setInquirySuccess(true);
+      } else {
+        setMessage({ type: "error", text: json.message || "Failed to send inquiry" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to submit enterprise inquiry" });
+    } finally {
+      setSubmittingInquiry(false);
     }
   };
 
@@ -366,11 +415,138 @@ export function BillingClient({ user }: { user: SessionUser }) {
               </p>
             </div>
           </div>
-          <Button variant="outline" className="shrink-0 gap-2">
+          <Button
+            onClick={() => {
+              setInquirySuccess(false);
+              setContactOpen(true);
+            }}
+            variant="outline"
+            className="shrink-0 gap-2"
+          >
             Contact Sales <ExternalLink className="h-4 w-4" />
           </Button>
         </div>
       </div>
+
+      {/* Contact Sales Interactive Modal */}
+      <Modal
+        open={contactOpen}
+        onClose={() => setContactOpen(false)}
+        title="Contact Enterprise Sales"
+      >
+        <p className="mb-4 text-xs text-slate-500">
+          Speak with our solutions team about custom pricing, on-premise Docker deployment, and enterprise SLAs.
+        </p>
+        {inquirySuccess ? (
+          <div className="space-y-4 py-6 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900">Inquiry Received!</h3>
+            <p className="text-sm text-slate-600 max-w-sm mx-auto">
+              Thank you for contacting TechNova Flow Enterprise Solutions. Our sales team will reach out to{" "}
+              <span className="font-semibold text-slate-800">{workEmail}</span> within 24 hours.
+            </p>
+            <div className="pt-2">
+              <Button onClick={() => setContactOpen(false)}>Close</Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSendInquiry} className="space-y-4 pt-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-700">Company Name</label>
+              <Input
+                required
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="e.g. Acme Global Inc."
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-700">Work Email</label>
+                <Input
+                  required
+                  type="email"
+                  value={workEmail}
+                  onChange={(e) => setWorkEmail(e.target.value)}
+                  placeholder="you@company.com"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-700">Team Size</label>
+                <select
+                  value={teamSize}
+                  onChange={(e) => setTeamSize(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
+                >
+                  <option value="50 - 100 members">50 - 100 members</option>
+                  <option value="100 - 500 members">100 - 500 members</option>
+                  <option value="500 - 2,000 members">500 - 2,000 members</option>
+                  <option value="2,000+ members (Global Enterprise)">2,000+ members (Global)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-medium text-slate-700">
+                Enterprise Requirements (Select all that apply)
+              </label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
+                {[
+                  "On-Premise Docker Deployment",
+                  "Custom SAML / SSO Integration",
+                  "Dedicated 99.99% Uptime SLA",
+                  "Custom Multi-Level Workflows",
+                  "Annual Wire / Invoicing Terms",
+                  "Custom Compliance & Audit Logs",
+                ].map((req) => (
+                  <label
+                    key={req}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 transition-all",
+                      selectedReqs.includes(req)
+                        ? "border-indigo-500 bg-indigo-50/50 text-indigo-900 font-medium"
+                        : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedReqs.includes(req)}
+                      onChange={() => toggleReq(req)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>{req}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-700">
+                Additional Notes or Questions (Optional)
+              </label>
+              <textarea
+                value={inquiryNotes}
+                onChange={(e) => setInquiryNotes(e.target.value)}
+                rows={3}
+                placeholder="Tell us about your internal approval processes, departments, or custom requirements..."
+                className="w-full rounded-lg border border-slate-300 bg-white p-3 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <Button type="button" variant="outline" onClick={() => setContactOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={submittingInquiry} className="gap-2">
+                <Send className="h-4 w-4" /> Submit Enterprise Request
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }
