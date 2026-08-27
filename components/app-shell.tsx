@@ -18,6 +18,7 @@ import {
   X,
   ShieldCheck,
   Settings,
+  CreditCard,
   User as UserIcon,
   ChevronDown,
   ClipboardList,
@@ -57,6 +58,7 @@ const NAV_ITEMS: NavItemConfig[] = [
 
 const ADMIN_ITEMS: NavItemConfig[] = [
   { href: "/audit-logs", label: "Audit Logs", icon: ShieldCheck, permission: "audit.view" },
+  { href: "/settings/billing", label: "Billing & Plans", icon: CreditCard, permission: "settings.manage" },
   { href: "/settings", label: "Settings", icon: Settings, permission: "settings.manage" },
 ];
 

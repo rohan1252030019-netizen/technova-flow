@@ -1,3 +1,5 @@
+export {};
+
 const ROLES_TO_TEST = [
   { role: "SUPER_ADMIN", email: "admin@technova.com" },
   { role: "HR_ADMIN", email: "hr@technova.com" },
