@@ -32,7 +32,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  ...(process.env.DOCKER_BUILD === "1" ? { output: "standalone" } : {}),
   serverExternalPackages: ["@prisma/adapter-pg", "pg", "bcryptjs"],
   async headers() {
     return [
