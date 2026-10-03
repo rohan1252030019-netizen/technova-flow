@@ -1,6 +1,8 @@
 import pg from "pg";
 
-const url = "postgresql://cnt_admin:cnt_admin_dev_password@localhost:5432/cnt_project?schema=public";
+const url =
+  process.env.DATABASE_URL ||
+  "postgresql://cnt_admin:cnt_admin_dev_password@localhost:5433/cnt_project?schema=public";
 
 const pool = new pg.Pool({ connectionString: url });
 

@@ -1,11 +1,12 @@
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../app/generated/prisma/client";
+import { requireDatabaseUrl, sslForUrl } from "./db-url";
 
-const connectionString = "postgresql://postgres.cklzlmbvdixgznkylyvm:Roh%40nshally9967@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres";
+const connectionString = requireDatabaseUrl();
 
 async function verifyDepartments() {
-  const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+  const pool = new Pool({ connectionString, ssl: sslForUrl(connectionString) });
   const adapter = new PrismaPg(pool);
   const prisma = new PrismaClient({ adapter });
 

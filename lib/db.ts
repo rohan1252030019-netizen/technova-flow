@@ -11,7 +11,7 @@ const globalForPrisma = globalThis as unknown as {
 function createClient() {
   const connectionString =
     process.env.DATABASE_URL ||
-    "postgresql://cnt_user:cnt_password_secure@localhost:5432/cnt_project";
+    "postgresql://cnt_user:cnt_password_secure@localhost:5433/cnt_project";
 
   const isCloud =
     connectionString.includes("supabase.com") ||

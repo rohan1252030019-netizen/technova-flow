@@ -20,7 +20,9 @@ A production-grade workflow and request management platform for enterprises: con
 docker compose up -d
 ```
 
-This starts PostgreSQL 16 on `localhost:5432` with the database `cnt_project` (credentials are in `.env`).
+This starts PostgreSQL 16 on `localhost:5433` with the database `cnt_project` (credentials are in `.env`).
+
+The host port is `5433` (container port `5432`) so it does not collide with other local Postgres containers. If port `5433` is taken, change the host side of the `ports:` mapping in `docker-compose.yml` **and** `DATABASE_URL` in `.env` to match — a mismatch makes the app silently connect to a different database instead of failing loudly.
 
 ### 2. Install dependencies and configure
 

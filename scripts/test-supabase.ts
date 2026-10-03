@@ -1,8 +1,9 @@
 import pg from "pg";
+import { requireDatabaseUrl, sslForUrl } from "./db-url";
 
-const url = "postgresql://postgres.cklzlmbvdixgznkylyvm:Roh%40nshally9967@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres";
+const url = requireDatabaseUrl();
 
-const pool = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
+const pool = new pg.Pool({ connectionString: url, ssl: sslForUrl(url) });
 
 async function main() {
   console.log("Connecting to Supabase...");

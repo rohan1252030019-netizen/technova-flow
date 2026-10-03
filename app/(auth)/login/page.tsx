@@ -24,15 +24,25 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setError(data.message || "Login failed");
+
+      // Read as text first: a failed request can return an empty or HTML body,
+      // and calling res.json() on it would throw and mask the real status.
+      const raw = await res.text();
+      let data: any = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+
+      if (!res.ok || !data?.success) {
+        setError(data?.message || `Login failed (server returned ${res.status})`);
         return;
       }
       router.push("/dashboard");
       router.refresh();
     } catch {
-      setError("Network error. Please try again.");
+      setError("Cannot reach the server. Check that the app and database are running, then try again.");
     } finally {
       setLoading(false);
     }
